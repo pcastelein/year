@@ -6,17 +6,49 @@
 #include <cglm/mat4.h>
 
 #include <stdio.h>
-
+#include <string.h>
 #include "defines.h"
 
-int main(int argc, char* argv[]) {
+#ifdef DEBUG
+    const b32 enableValidationsLayers = true;
+#else
+    const b32 enableValidationsLayers = false;
+#endif
+
+const u32 WIDTH = 800;
+const u32 HEIGHT = 600;
+
+const char* const validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
+
+static b32 checkValidationLayerSupport() {
+    u32 layerCount;
+    vkEnumerateInstanceLayerProperties(&layerCount, NULL);
+    VkLayerProperties* availableLayers = malloc(sizeof(VkLayerProperties) * layerCount);
+    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers);
+
+    for (size i = 0; i < countof(validationLayers); i++) {
+        b32 layerFound = false;
+        for (size j = 0; j < layerCount; j++) {
+            if (strcmp(validationLayers[i], availableLayers[j].layerName) == 0) {
+                layerFound = true;
+                break;
+            }
+        }
+        if (!layerFound) {
+            return false;
+        }
+    }
+    free(availableLayers); //TODO: Memory
+    return true;  
+}
+
+int main(/*int argc, char* argv[]*/) {
 
     //GLFW Initialization
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); //resizing sisabled until handling buffers 
-    u32 WIDTH = 800;
-    u32 HEIGHT = 600;
+
     GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan window", NULL, NULL);
 
     if (window == NULL) {
@@ -25,6 +57,12 @@ int main(int argc, char* argv[]) {
     }
 
     // Vulkan Instance setup
+    // Validation Layers
+    if (enableValidationsLayers && !checkValidationLayerSupport()) {
+        fprintf(stderr, "validation layers requested, but not available!\n");
+        return EXIT_FAILURE;
+    }
+
     //OPTIONAL:
     VkApplicationInfo appInfo = {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -37,15 +75,23 @@ int main(int argc, char* argv[]) {
     VkInstanceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
+
     u32 glfwExtensionCount = 0;
     const char** glfwExtensions;
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
     createInfo.enabledExtensionCount = glfwExtensionCount;
     createInfo.ppEnabledExtensionNames = glfwExtensions;
-    createInfo.enabledLayerCount = 0; //NOTE: telling the driver we aren't using validation layers
+    if (enableValidationsLayers) {
+        createInfo.enabledLayerCount = (u32) countof(validationLayers);
+        createInfo.ppEnabledLayerNames = validationLayers;
+    }
+    else {
+        createInfo.enabledLayerCount = 0; //NOTE: telling the driver we aren't using validation layers
+    }
+    
     VkInstance instance;
     if (vkCreateInstance(&createInfo, NULL, &instance) != VK_SUCCESS) {
-        fprintf(stderr, "failed to create Vulkan instance!");
+        fprintf(stderr, "failed to create Vulkan instance!\n");
         return EXIT_FAILURE;
     }
     u32 extensionCount = 0;

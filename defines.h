@@ -22,12 +22,12 @@ typedef ptrdiff_t  size;
 typedef size_t    usize;
 
 #define szeof(x)      (size)sizeof(x) //TODO: replace unsigned size of in main program and use thisn one
-#define alignof(x)    (size)_Alignof(x)
-#define countof(a)    (size)(sizeof(a) / sizeof(*(a)))
+#define algnof(x)     (size)_Alignof(x)
+#define countof(a)    (size)(szeof(a) / szeof(*(a)))
 #define lengthof(s)   (countof(s) - 1)
 #define new(a, t, n)  (t *)alloc(a, sizeof(t), _Alignof(t), n)
 
-#define assert(c)     while(!(c)) __builtin_unreachable()
+#define asert(c)     while(!(c)) __builtin_unreachable()
 
 
 //Composite types
