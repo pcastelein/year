@@ -83,7 +83,7 @@ static void oom(void) {
     osfail();
 }
 
-arena newarena(size cap) {
+static arena newarena(size cap) {
     arena a = {0}; //NOTE: this function defaults to 0
     a.beg = malloc((usize) cap);
     a.end = a.beg ? a.beg + cap : 0;

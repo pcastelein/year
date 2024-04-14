@@ -103,7 +103,7 @@ int main(/*int argc, char* argv[]*/) {
     VkExtensionProperties* extensions = malloc(sizeof(extensionCount) * extensionCount); //TODO: memory
     vkEnumerateInstanceExtensionProperties(NULL, &extensionCount, extensions);
 
-    printf("%d extensions supported:\n", extensionCount);
+    printf("%u extensions supported:\n", extensionCount);
     for (u32 i = 0; i < extensionCount; i++) {
         printf("\t %s \n", extensions[i].extensionName);
     }
