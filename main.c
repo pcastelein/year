@@ -6,8 +6,7 @@
 #include <cglm/mat4.h>
 
 #include <stdio.h>
-#include <string.h>
-#include "defines.h"
+#include "core.h"
 
 #ifdef DEBUG
     const b32 enableValidationsLayers = true;
@@ -44,6 +43,11 @@ static b32 checkValidationLayerSupport() {
 
 int main(/*int argc, char* argv[]*/) {
 
+    //App Memory, 256MB
+    enum { CAP = 1 << 28 };
+    arena pool = newarena(CAP);
+    if (pool.end == NULL) {oom();}
+    
     //GLFW Initialization
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
