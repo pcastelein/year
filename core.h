@@ -44,6 +44,7 @@ typedef size_t    usize;
 #define asert(c)     while(!(c)) __builtin_unreachable() //NOTE: Only Linux
 
 //Flags for core functions
+#define NONE   0x0
 #define NOZERO 0x1
 
 //Core OS functions
@@ -74,7 +75,7 @@ static b32 oswrite(i32 fd, u8 *buf, i32 len)
 // Memory 
 typedef struct {
     byte *beg;
-    byte *end;
+    byte *end; //NOTE: the end is not an addressable byte
 } arena;
 
 static void oom(void) {
@@ -84,6 +85,7 @@ static void oom(void) {
 }
 
 static arena newarena(size cap) {
+    assert(cap >= 0);
     arena a = {0}; //NOTE: this function defaults to 0
     a.beg = malloc((usize) cap);
     a.end = a.beg ? a.beg + cap : 0;
@@ -91,9 +93,11 @@ static arena newarena(size cap) {
 }
 
 // Linear Allocator
-__attribute((malloc, alloc_size(2, 4), alloc_align(3))) // malloc for guarentee no alias + optimizations
+// TODO: remove commented out version, kept as backup for alloc understanding
+/* __attribute((malloc, alloc_size(2, 4), alloc_align(3))) // malloc for guarentee no alias + optimizations
 static void *alloc(arena *a, size objsize, size align, size count, u32 flags)
 {
+    assert(count >= 0);
     size avail = a->end - a->beg;
     size padding = -(uptr)a->beg & (align - 1); // align is pow of 2, doing mod on remainder of memory by the object alignment
     if (count > (avail - padding) / objsize) {
@@ -103,6 +107,24 @@ static void *alloc(arena *a, size objsize, size align, size count, u32 flags)
     void *p = a->beg + padding;
     a->beg += padding + total;
     return flags & NOZERO ? p : memset(p, 0, (usize) total);
+} */
+
+__attribute((malloc, alloc_size(2, 4), alloc_align(3))) // malloc for guarentee no alias + optimizations
+static byte *alloc(arena *a, size objsize, size align, size count, u32 flags)
+{
+    assert(count >= 0);
+    size pad = (uptr)a->end & (align - 1); // align is pow of 2, doing mod on remainder of memory by the object alignment
+    assert(count < (a->end - a->beg - pad) / objsize);  // oom TODO: call oom for non debug builds
+    a->end -= objsize*count + pad;
+    return flags & NOZERO ? a->end : memset(a->end, 0, (usize) count * objsize);
+}
+
+static arena newafroma(arena *a, size cap) { //TODO: add flag support?
+    assert(cap > 0);
+    arena n;
+    n.beg = alloc(a, cap, algnof(u8), 1, NONE); //NOTE: is my new arena byte aligned?
+    n.end = n.beg + cap;
+    return n;
 }
 
 // UTF-8 Strings

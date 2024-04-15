@@ -19,10 +19,11 @@ const u32 HEIGHT = 600;
 
 const char* const validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
 
-static b32 checkValidationLayerSupport() {
+static b32 checkValidationLayerSupport(arena scratch) {
     u32 layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, NULL);
-    VkLayerProperties* availableLayers = malloc(sizeof(VkLayerProperties) * layerCount);
+    //VkLayerProperties* availableLayers = malloc(sizeof(VkLayerProperties) * layerCount);
+    VkLayerProperties* availableLayers = new(&scratch, VkLayerProperties, layerCount);
     vkEnumerateInstanceLayerProperties(&layerCount, availableLayers);
 
     for (size i = 0; i < countof(validationLayers); i++) {
@@ -37,34 +38,33 @@ static b32 checkValidationLayerSupport() {
             return false;
         }
     }
-    free(availableLayers); //TODO: Memory
+    //free(availableLayers); //TODO: Memory
     return true;  
 }
 
 int main(/*int argc, char* argv[]*/) {
-
     //App Memory, 256MB
     enum { CAP = 1 << 28 };
-    arena pool = newarena(CAP);
-    if (pool.end == NULL) {oom();}
+    arena mem = newarena(CAP);
+    if (mem.end == NULL) {oom();}
     
     //GLFW Initialization
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); //resizing sisabled until handling buffers 
 
-    GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan window", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan Window", NULL, NULL);
 
     if (window == NULL) {
         glfwTerminate();
-        return EXIT_FAILURE;
+        osfail();
     }
 
     // Vulkan Instance setup
     // Validation Layers
-    if (enableValidationsLayers && !checkValidationLayerSupport()) {
+    if (enableValidationsLayers && !checkValidationLayerSupport(mem)) {
         fprintf(stderr, "validation layers requested, but not available!\n");
-        return EXIT_FAILURE;
+        osfail();
     }
 
     //OPTIONAL:
@@ -96,11 +96,11 @@ int main(/*int argc, char* argv[]*/) {
     VkInstance instance;
     if (vkCreateInstance(&createInfo, NULL, &instance) != VK_SUCCESS) {
         fprintf(stderr, "failed to create Vulkan instance!\n");
-        return EXIT_FAILURE;
+        osfail();
     }
     u32 extensionCount = 0;
     vkEnumerateInstanceExtensionProperties(NULL, &extensionCount, NULL);
-    VkExtensionProperties* extensions = malloc(sizeof(extensionCount) * extensionCount); //TODO: memory
+    VkExtensionProperties* extensions = new(&mem, VkExtensionProperties, extensionCount);
     vkEnumerateInstanceExtensionProperties(NULL, &extensionCount, extensions);
 
     printf("%u extensions supported:\n", extensionCount);
@@ -114,13 +114,12 @@ int main(/*int argc, char* argv[]*/) {
         glfwPollEvents();
     }
 
-    //TODO: memory
-    vkDestroyInstance(instance, NULL);
-    free(extensions);
+    //NOTE: memory, I don't think there is a point in destroying these if we are exiting
+    //vkDestroyInstance(instance, NULL);
 
-    glfwDestroyWindow(window);
+    //glfwDestroyWindow(window);
 
-    glfwTerminate();
+    //glfwTerminate();
 
     
     return 0;
