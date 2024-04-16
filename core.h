@@ -34,7 +34,7 @@ typedef size_t    usize;
 #define szeof(x)      (size)sizeof(x) //TODO: replace unsigned size of in main program and use this one
 #define algnof(x)     (size)_Alignof(x)
 #define countof(a)    (size)(szeof(a) / szeof(*(a)))
-#define lengthof(s)   (countof(s) - 1) // Length of C String
+#define lengthof(s)   (countof(s) - 1) // Length of literal C String
 #define new(...)            newx(__VA_ARGS__,new4,new3,new2)(__VA_ARGS__)
 #define newx(a,b,c,d,e,...) e
 #define new2(a, t)          (t *)alloc(a, szeof(t), algnof(t), 1, 0) //a is for arena
@@ -53,6 +53,7 @@ static void osfail(void)
     _exit(1);
 }
 
+//NOTE: fd = 1 is stdout
 static i32 osread(i32 fd, u8 *buf, i32 cap)
 {
     return (i32)read(fd, buf, cap);
@@ -119,7 +120,7 @@ static byte *alloc(arena *a, size objsize, size align, size count, u32 flags)
     return flags & NOZERO ? a->end : memset(a->end, 0, (usize) count * objsize);
 }
 
-static arena newafroma(arena *a, size cap) { //TODO: add flag support?
+static arena afromarena(arena *a, size cap) { //TODO: add flag support?
     assert(cap > 0);
     arena n;
     n.beg = alloc(a, cap, algnof(u8), 1, NONE); //NOTE: is my new arena byte aligned?
@@ -128,7 +129,7 @@ static arena newafroma(arena *a, size cap) { //TODO: add flag support?
 }
 
 // UTF-8 Strings
-#define s8(s) (s8){(u8 *)s, lengthof(s)} // takes a C string and returns a pointer u8 string
+#define s8(s) (s8){(u8 *)s, lengthof(s)} // takes a literal C string and returns a pointer u8 string
 typedef struct {
     u8  *data;
     size len;
@@ -143,6 +144,12 @@ static s8   s8clone(s8, arena *);
 
 
 //Arena backed arrays
+typedef struct {
+    s8   *data;
+    size len;
+    size cap;  
+} s8a;
+
 typedef struct {
     i32 *data;
     size  len;

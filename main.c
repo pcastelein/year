@@ -1,46 +1,11 @@
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <cglm/mat4.h>
 
 #include <stdio.h>
 #include "core.h"
+#include "vksetup.h"
 
-#ifdef DEBUG
-    const b32 enableValidationsLayers = true;
-#else
-    const b32 enableValidationsLayers = false;
-#endif
-
-const u32 WIDTH = 800;
-const u32 HEIGHT = 600;
-
-const char* const validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
-
-static b32 checkValidationLayerSupport(arena scratch) {
-    u32 layerCount;
-    vkEnumerateInstanceLayerProperties(&layerCount, NULL);
-    //VkLayerProperties* availableLayers = malloc(sizeof(VkLayerProperties) * layerCount);
-    VkLayerProperties* availableLayers = new(&scratch, VkLayerProperties, layerCount);
-    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers);
-
-    for (size i = 0; i < countof(validationLayers); i++) {
-        b32 layerFound = false;
-        for (size j = 0; j < layerCount; j++) {
-            if (strcmp(validationLayers[i], availableLayers[j].layerName) == 0) {
-                layerFound = true;
-                break;
-            }
-        }
-        if (!layerFound) {
-            return false;
-        }
-    }
-    //free(availableLayers); //TODO: Memory
-    return true;  
-}
 
 int main(/*int argc, char* argv[]*/) {
     //App Memory, 256MB
@@ -76,6 +41,16 @@ int main(/*int argc, char* argv[]*/) {
     appInfo.engineVersion = VK_MAKE_API_VERSION(0, 0, 0, 1);
     appInfo.apiVersion = VK_API_VERSION_1_0; //NOTE: telling driver we are on Vulkan 1.0
 
+    // Debug Message Info Struct
+    VkDebugUtilsMessengerEXT debugMessenger;
+    VkDebugUtilsMessengerCreateInfoEXT createMessengerInfo = {};
+    createMessengerInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    createMessengerInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    createMessengerInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    createMessengerInfo.pfnUserCallback = debugCallback;
+    createMessengerInfo.pUserData = NULL; // Optional
+
+    // Instance info Struct
     VkInstanceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
@@ -83,29 +58,46 @@ int main(/*int argc, char* argv[]*/) {
     u32 glfwExtensionCount = 0;
     const char** glfwExtensions;
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-    createInfo.enabledExtensionCount = glfwExtensionCount;
-    createInfo.ppEnabledExtensionNames = glfwExtensions;
+    
+    //NOTE: keeping around glfwExt pointers in our memory, maybe REFACTOR
     if (enableValidationsLayers) {
         createInfo.enabledLayerCount = (u32) countof(validationLayers);
         createInfo.ppEnabledLayerNames = validationLayers;
+        
+        const char** glfwExtPlus = new(&mem, const char*, glfwExtensionCount + 1);
+        for (u32 i = 0; i < glfwExtensionCount; i++) {
+            glfwExtPlus[i] = glfwExtensions[i];
+        }
+        const char extDebug[] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+        glfwExtPlus[glfwExtensionCount] = extDebug;
+        createInfo.enabledExtensionCount = glfwExtensionCount + 1;
+        createInfo.ppEnabledExtensionNames = (const char**) glfwExtPlus;
+        //Include debug messenger info to be able to debug vkCreateInstance and vkDestroyInsance usage.
+        createInfo.pNext = &createMessengerInfo;
     }
     else {
         createInfo.enabledLayerCount = 0; //NOTE: telling the driver we aren't using validation layers
+        createInfo.enabledExtensionCount = glfwExtensionCount;
+        createInfo.ppEnabledExtensionNames = glfwExtensions;
     }
-    
+
     VkInstance instance;
     if (vkCreateInstance(&createInfo, NULL, &instance) != VK_SUCCESS) {
         fprintf(stderr, "failed to create Vulkan instance!\n");
         osfail();
     }
-    u32 extensionCount = 0;
-    vkEnumerateInstanceExtensionProperties(NULL, &extensionCount, NULL);
-    VkExtensionProperties* extensions = new(&mem, VkExtensionProperties, extensionCount);
-    vkEnumerateInstanceExtensionProperties(NULL, &extensionCount, extensions);
 
-    printf("%u extensions supported:\n", extensionCount);
-    for (u32 i = 0; i < extensionCount; i++) {
-        printf("\t %s \n", extensions[i].extensionName);
+    //Setup Vulkan Layer Debugging TODO: send an allocator
+    PFN_vkCreateDebugUtilsMessengerEXT funcDebugMess = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    if (funcDebugMess == NULL) {
+        fprintf(stderr, "Failed to aquire function to setup Debug messenger.\n");
+        osfail();
+    }
+    else {
+        if(funcDebugMess(instance, &createMessengerInfo, NULL, &debugMessenger) != VK_SUCCESS) {
+            fprintf(stderr, "Failed to setup Debug messenger.\n");
+            osfail();
+        }
     }
 
     glfwMakeContextCurrent(window);
@@ -115,6 +107,9 @@ int main(/*int argc, char* argv[]*/) {
     }
 
     //NOTE: memory, I don't think there is a point in destroying these if we are exiting
+/*     if (enableValidationsLayers) { //NOTE: vkDestroyDebug.. hasn't been loaded.
+        vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, NULL);
+    } */
     //vkDestroyInstance(instance, NULL);
 
     //glfwDestroyWindow(window);
