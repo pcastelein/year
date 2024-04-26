@@ -16,6 +16,11 @@ const u32 HEIGHT = 600;
 
 const char* const validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
 
+//TODO: Work in Progress
+typedef struct {
+    b32 queuegraphicsbit;
+} QueueFamilyIndices;
+
 static b32 checkValidationLayerSupport(arena scratch) {
     u32 layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, NULL);
@@ -50,6 +55,26 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     
 
     return VK_FALSE;
+}
+
+static b32 isDeviceSuitable(VkPhysicalDevice device, arena scratch) {
+    QueueFamilyIndices indices = {};
+    
+    u32 queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, NULL);
+    VkQueueFamilyProperties* queueFamProps = new(&scratch, VkQueueFamilyProperties, queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamProps);
+
+    for (u32 i = 0; i < queueFamilyCount; i++) {
+        if (queueFamProps->queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+            indices.queuegraphicsbit = true;
+        }
+        if (indices.queuegraphicsbit) {
+            break;
+        }
+    }
+
+    return indices.queuegraphicsbit;
 }
 
 //NOTE: maybe not neccessary

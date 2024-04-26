@@ -36,13 +36,13 @@ int main(/*int argc, char* argv[]*/) {
     VkApplicationInfo appInfo = {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = "Bench";
-    appInfo.applicationVersion = VK_MAKE_API_VERSION(0, 0, 0, 1);
+    appInfo.applicationVersion = VK_MAKE_API_VERSION(0, 0, 1, 0);
     appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = VK_MAKE_API_VERSION(0, 0, 0, 1);
+    appInfo.engineVersion = VK_MAKE_API_VERSION(0, 0, 1, 0);
     appInfo.apiVersion = VK_API_VERSION_1_0; //NOTE: telling driver we are on Vulkan 1.0
 
     // Debug Message Info Struct
-    VkDebugUtilsMessengerEXT debugMessenger;
+    VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
     VkDebugUtilsMessengerCreateInfoEXT createMessengerInfo = {};
     createMessengerInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
     createMessengerInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
@@ -99,6 +99,33 @@ int main(/*int argc, char* argv[]*/) {
             osfail();
         }
     }
+
+    //VK Physical Device Setup
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    u32 deviceCount = 0;
+    vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
+    if (deviceCount == 0) {
+        fprintf(stderr, "Failed to find a GPU with Vulkan support.");
+        osfail();
+    }
+    else { // stack it
+        arena scratch = mem;
+        VkPhysicalDevice *pda = new(&scratch, VkPhysicalDevice, deviceCount);
+        vkEnumeratePhysicalDevices(instance, &deviceCount, pda);
+        for (u32 i = 0; i < deviceCount; i++) {
+            if (isDeviceSuitable(pda[i], mem)) {
+                physicalDevice = pda[i];
+                break;
+            }
+        }
+        if(physicalDevice == VK_NULL_HANDLE) { //TODO: robust device selection
+            fprintf(stderr, "Failed to find a GPU suporting Geometry Shaders.\n");
+            osfail();
+        }
+    }
+
+    //Logical Device
+    VkDevice device = VK_NULL_HANDLE;
 
     glfwMakeContextCurrent(window);
 
