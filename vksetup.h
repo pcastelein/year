@@ -11,15 +11,15 @@
     const b32 enableValidationsLayers = false;
 #endif
 
-const u32 WIDTH = 800;
-const u32 HEIGHT = 600;
+#define VK_CHECK(call) \
+	do { \
+		VkResult result_ = call; \
+		assert(result_ == VK_SUCCESS); \
+	} while (0)
+
 
 const char* const validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
 
-//TODO: Work in Progress
-typedef struct {
-    b32 queuegraphicsbit;
-} QueueFamilyIndices;
 
 static b32 checkValidationLayerSupport(arena scratch) {
     u32 layerCount;
@@ -57,24 +57,61 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     return VK_FALSE;
 }
 
-static b32 isDeviceSuitable(VkPhysicalDevice device, arena scratch) {
-    QueueFamilyIndices indices = {};
-    
+static u32 getGraphicsQueueFamily(VkPhysicalDevice device, arena scratch) {
     u32 queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, NULL);
     VkQueueFamilyProperties* queueFamProps = new(&scratch, VkQueueFamilyProperties, queueFamilyCount);
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamProps);
 
     for (u32 i = 0; i < queueFamilyCount; i++) {
+        //TODO: Create the surface we want before selecting the queue and check for support here
         if (queueFamProps->queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            indices.queuegraphicsbit = true;
-        }
-        if (indices.queuegraphicsbit) {
-            break;
+            return i;
         }
     }
 
-    return indices.queuegraphicsbit;
+    //TODO: brittle in case of some bizzare compute only hardware
+    assert("No queue families support graphics" == NULL);
+    return 0;
+}
+
+VkDevice createDevice(VkPhysicalDevice physicalDevice, u32 familyIndex)
+{
+	float queuePriorities[] = { 1.0f };
+
+	VkDeviceQueueCreateInfo queueInfo = { .sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
+	queueInfo.queueFamilyIndex = familyIndex;
+	queueInfo.queueCount = 1;
+	queueInfo.pQueuePriorities = queuePriorities;
+
+	/*const char* extensions[] =
+	{
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME
+	};*/
+
+    VkPhysicalDeviceFeatures deviceFeatures = {};
+
+	VkDeviceCreateInfo createInfo = { .sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
+	createInfo.queueCreateInfoCount = 1;
+	createInfo.pQueueCreateInfos = &queueInfo;
+    createInfo.pEnabledFeatures = &deviceFeatures;
+
+	//TODO:?
+    //createInfo.ppEnabledExtensionNames = extensions;
+	//createInfo.enabledExtensionCount = count(extensions);
+
+	VkDevice device = VK_NULL_HANDLE;
+	VK_CHECK(vkCreateDevice(physicalDevice, &createInfo, NULL, &device));
+
+	return device;
+}
+
+VkSurfaceKHR createSurface(VkInstance instance, GLFWwindow *window) {
+    VkSurfaceKHR surface;
+    VkResult res = glfwCreateWindowSurface(instance, window, NULL, &surface);
+    printf("%d\n", res);
+    VK_CHECK(res);
+    return surface;
 }
 
 //NOTE: maybe not neccessary

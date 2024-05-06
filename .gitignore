@@ -62,3 +62,6 @@ year
 asan.log.*
 maps.dump
 maps.dump.*
+
+#ExampleCode
+vk.cpp

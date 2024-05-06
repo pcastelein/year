@@ -12,18 +12,6 @@ int main(int argc, char* argv[]) {
     enum { CAP = 1 << 28 };
     arena mem = newarena(CAP);
     if (mem.end == NULL) {oom();}
-    
-    //GLFW Initialization
-    glfwInit();
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); //resizing sisabled until handling buffers 
-
-    GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan Window", NULL, NULL);
-
-    if (window == NULL) {
-        glfwTerminate();
-        osfail();
-    }
 
     // Vulkan Instance setup
     // Validation Layers
@@ -35,7 +23,7 @@ int main(int argc, char* argv[]) {
     //OPTIONAL:
     VkApplicationInfo appInfo = {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "Bench";
+    appInfo.pApplicationName = "Year";
     appInfo.applicationVersion = VK_MAKE_API_VERSION(0, 0, 1, 0);
     appInfo.pEngineName = "No Engine";
     appInfo.engineVersion = VK_MAKE_API_VERSION(0, 0, 1, 0);
@@ -87,28 +75,24 @@ int main(int argc, char* argv[]) {
     }
 
     //Setup Vulkan Layer Debugging TODO: send an allocator
-    PFN_vkCreateDebugUtilsMessengerEXT funcDebugMess = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-    if (funcDebugMess == NULL) {
-        fprintf(stderr, "Failed to aquire function to setup Debug messenger.\n");
-        osfail();
-    }
-    else {
-        if(funcDebugMess(instance, &createMessengerInfo, NULL, &debugMessenger) != VK_SUCCESS) {
-            fprintf(stderr, "Failed to setup Debug messenger.\n");
+    if (enableValidationsLayers) {
+        PFN_vkCreateDebugUtilsMessengerEXT funcDebugMess = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+        if (funcDebugMess == NULL) {
+            fprintf(stderr, "Failed to aquire function to setup Debug messenger.\n");
             osfail();
+        }
+        else {
+            if(funcDebugMess(instance, &createMessengerInfo, NULL, &debugMessenger) != VK_SUCCESS) {
+                fprintf(stderr, "Failed to setup Debug messenger.\n");
+                osfail();
+            }
         }
     }
 
-    //Aquire function to destroy debug mess
-    PFN_vkDestroyDebugUtilsMessengerEXT funcDestroyDebugMess = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-    if (funcDestroyDebugMess == NULL) {
-        fprintf(stderr, "Failed to aquire function to destroy Debug messenger.\n");
-        osfail();
-    }
-
-    //VK Physical Device Setup
+    //VK Physical Device Setup TODO - janky interaction with selecting queue and not commpatible with iGPUs
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     u32 deviceCount = 0;
+    u32 queuefamIdx = 0;
     vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
     if (deviceCount == 0) {
         fprintf(stderr, "Failed to find a GPU with Vulkan support.");
@@ -116,24 +100,44 @@ int main(int argc, char* argv[]) {
     }
     else { // stack it
         arena scratch = mem;
-        VkPhysicalDevice *pda = new(&scratch, VkPhysicalDevice, deviceCount);
-        vkEnumeratePhysicalDevices(instance, &deviceCount, pda);
+        VkPhysicalDevice *pdarr = new(&scratch, VkPhysicalDevice, deviceCount);
+        vkEnumeratePhysicalDevices(instance, &deviceCount, pdarr);
         for (u32 i = 0; i < deviceCount; i++) {
-            if (isDeviceSuitable(pda[i], mem)) {
-                physicalDevice = pda[i];
+            VkPhysicalDeviceProperties props;
+            vkGetPhysicalDeviceProperties(pdarr[i], &props);
+            if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+			    printf("Picking discrete GPU: %s\n", props.deviceName);
+                queuefamIdx = getGraphicsQueueFamily(pdarr[i], scratch);
+                physicalDevice = pdarr[i];
                 break;
-            }
+		    }
         }
         if(physicalDevice == VK_NULL_HANDLE) { //TODO: robust device selection
-            fprintf(stderr, "Failed to find a GPU suporting Geometry Shaders.\n");
+            fprintf(stderr, "Failed to find a discrete GPU supporting rasterization.\n");
             osfail();
         }
     }
 
     //Logical Device
-    //VkDevice device = VK_NULL_HANDLE;
+    VkDevice device = createDevice(physicalDevice, queuefamIdx);
+    assert(device);
+
+    //GLFW Initialization
+    glfwInit();
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); //resizing disabled until handling buffers 
+
+    GLFWwindow* window = glfwCreateWindow(1024, 768, "y.e.a.r.", NULL, NULL);
+    if (window == NULL) {
+        glfwTerminate();
+        osfail();
+    }
 
     glfwMakeContextCurrent(window);
+
+    VkSurfaceKHR surface = createSurface(instance, window);
+    assert(surface);
+
 
     while(!glfwWindowShouldClose(window)) {
         glfwPollEvents();
@@ -141,7 +145,14 @@ int main(int argc, char* argv[]) {
 
     //NOTE: memory, I don't think there is a point in destroying these if we are exiting without running the sanitizer
     if (enableValidationsLayers) {
+        //Aquire function to destroy debug mess
+        PFN_vkDestroyDebugUtilsMessengerEXT funcDestroyDebugMess = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+        if (funcDestroyDebugMess == NULL) {
+            fprintf(stderr, "Failed to aquire function to destroy Debug messenger.\n");
+            osfail();
+        }
         funcDestroyDebugMess(instance, debugMessenger, NULL);
+        vkDestroyDevice(device, NULL);
         vkDestroyInstance(instance, NULL);
         glfwDestroyWindow(window);
         glfwTerminate();
