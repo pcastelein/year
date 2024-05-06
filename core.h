@@ -93,6 +93,11 @@ static arena newarena(size cap) {
     return a;
 }
 
+static void freearena(arena a) {
+    assert(a.beg != NULL);
+    free(a.beg);
+}
+
 // Linear Allocator
 // TODO: remove commented out version, kept as backup for alloc understanding
 /* __attribute((malloc, alloc_size(2, 4), alloc_align(3))) // malloc for guarentee no alias + optimizations

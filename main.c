@@ -7,7 +7,7 @@
 #include "vksetup.h"
 
 
-int main(/*int argc, char* argv[]*/) {
+int main(int argc, char* argv[]) {
     //App Memory, 256MB
     enum { CAP = 1 << 28 };
     arena mem = newarena(CAP);
@@ -68,8 +68,7 @@ int main(/*int argc, char* argv[]*/) {
         for (u32 i = 0; i < glfwExtensionCount; i++) {
             glfwExtPlus[i] = glfwExtensions[i];
         }
-        const char extDebug[] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-        glfwExtPlus[glfwExtensionCount] = extDebug;
+        glfwExtPlus[glfwExtensionCount] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
         createInfo.enabledExtensionCount = glfwExtensionCount + 1;
         createInfo.ppEnabledExtensionNames = (const char**) glfwExtPlus;
         //Include debug messenger info to be able to debug vkCreateInstance and vkDestroyInsance usage.
@@ -100,6 +99,13 @@ int main(/*int argc, char* argv[]*/) {
         }
     }
 
+    //Aquire function to destroy debug mess
+    PFN_vkDestroyDebugUtilsMessengerEXT funcDestroyDebugMess = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    if (funcDestroyDebugMess == NULL) {
+        fprintf(stderr, "Failed to aquire function to destroy Debug messenger.\n");
+        osfail();
+    }
+
     //VK Physical Device Setup
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     u32 deviceCount = 0;
@@ -125,7 +131,7 @@ int main(/*int argc, char* argv[]*/) {
     }
 
     //Logical Device
-    VkDevice device = VK_NULL_HANDLE;
+    //VkDevice device = VK_NULL_HANDLE;
 
     glfwMakeContextCurrent(window);
 
@@ -133,16 +139,14 @@ int main(/*int argc, char* argv[]*/) {
         glfwPollEvents();
     }
 
-    //NOTE: memory, I don't think there is a point in destroying these if we are exiting
-/*     if (enableValidationsLayers) { //NOTE: vkDestroyDebug.. hasn't been loaded.
-        vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, NULL);
-    } */
-    //vkDestroyInstance(instance, NULL);
-
-    //glfwDestroyWindow(window);
-
-    //glfwTerminate();
-
+    //NOTE: memory, I don't think there is a point in destroying these if we are exiting without running the sanitizer
+    if (enableValidationsLayers) {
+        funcDestroyDebugMess(instance, debugMessenger, NULL);
+        vkDestroyInstance(instance, NULL);
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        freearena(mem);
+    } 
     
     return 0;
 }
