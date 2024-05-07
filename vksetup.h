@@ -84,10 +84,10 @@ VkDevice createDevice(VkPhysicalDevice physicalDevice, u32 familyIndex)
 	queueInfo.queueCount = 1;
 	queueInfo.pQueuePriorities = queuePriorities;
 
-	/*const char* extensions[] =
+	const char* extensions[] =
 	{
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME
-	};*/
+	};
 
     VkPhysicalDeviceFeatures deviceFeatures = {};
 
@@ -96,9 +96,8 @@ VkDevice createDevice(VkPhysicalDevice physicalDevice, u32 familyIndex)
 	createInfo.pQueueCreateInfos = &queueInfo;
     createInfo.pEnabledFeatures = &deviceFeatures;
 
-	//TODO:?
-    //createInfo.ppEnabledExtensionNames = extensions;
-	//createInfo.enabledExtensionCount = count(extensions);
+    createInfo.ppEnabledExtensionNames = extensions;
+	createInfo.enabledExtensionCount = countof(extensions);
 
 	VkDevice device = VK_NULL_HANDLE;
 	VK_CHECK(vkCreateDevice(physicalDevice, &createInfo, NULL, &device));
@@ -108,10 +107,42 @@ VkDevice createDevice(VkPhysicalDevice physicalDevice, u32 familyIndex)
 
 VkSurfaceKHR createSurface(VkInstance instance, GLFWwindow *window) {
     VkSurfaceKHR surface;
-    VkResult res = glfwCreateWindowSurface(instance, window, NULL, &surface);
-    printf("%d\n", res);
-    VK_CHECK(res);
+    VK_CHECK(glfwCreateWindowSurface(instance, window, NULL, &surface));
     return surface;
+}
+
+VkFormat getSwapchainFormat(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, arena scratch)
+{
+    u32 formatCount = 0;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, NULL);
+	VkSurfaceFormatKHR *formats = new(&scratch, VkSurfaceFormatKHR, formatCount);
+	VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, formats));
+
+	assert(formatCount > 0); // TODO: this code might need to handle either formatCount being 0, or first element reporting VK_FORMAT_UNDEFINED
+	return formats[0].format;
+}
+
+VkSwapchainKHR createSwapchain(VkDevice device, VkSurfaceKHR surface, uint32_t familyIndex, VkFormat format, uint32_t width, uint32_t height)
+{
+	VkSwapchainCreateInfoKHR createInfo = { .sType=VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
+	createInfo.surface = surface;
+	createInfo.minImageCount = 2;
+	createInfo.imageFormat = format;
+	createInfo.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+	createInfo.imageExtent.width = width;
+	createInfo.imageExtent.height = height;
+	createInfo.imageArrayLayers = 1;
+	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	createInfo.queueFamilyIndexCount = 1;
+	createInfo.pQueueFamilyIndices = &familyIndex;
+	createInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	createInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+
+	VkSwapchainKHR swapchain = 0;
+	VK_CHECK(vkCreateSwapchainKHR(device, &createInfo, 0, &swapchain));
+
+	return swapchain;
 }
 
 //NOTE: maybe not neccessary

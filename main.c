@@ -13,6 +13,11 @@ int main(int argc, char* argv[]) {
     arena mem = newarena(CAP);
     if (mem.end == NULL) {oom();}
 
+    //GLFW Initialization
+    glfwInit();
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); //resizing disabled until handling buffers 
+
     // Vulkan Instance setup
     // Validation Layers
     if (enableValidationsLayers && !checkValidationLayerSupport(mem)) {
@@ -46,7 +51,10 @@ int main(int argc, char* argv[]) {
     u32 glfwExtensionCount = 0;
     const char** glfwExtensions;
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-    
+    printf("%u glfwExtensions supported:\n", glfwExtensionCount);
+    for (u32 i = 0; i < glfwExtensionCount; i++) {
+        printf("\t %s \n", glfwExtensions[i]);
+    }
     //NOTE: keeping around glfwExt pointers in our memory, maybe REFACTOR
     if (enableValidationsLayers) {
         createInfo.enabledLayerCount = (u32) countof(validationLayers);
@@ -92,7 +100,7 @@ int main(int argc, char* argv[]) {
     //VK Physical Device Setup TODO - janky interaction with selecting queue and not commpatible with iGPUs
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     u32 deviceCount = 0;
-    u32 queuefamIdx = 0;
+    u32 familyIndex = 0;
     vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
     if (deviceCount == 0) {
         fprintf(stderr, "Failed to find a GPU with Vulkan support.");
@@ -107,7 +115,7 @@ int main(int argc, char* argv[]) {
             vkGetPhysicalDeviceProperties(pdarr[i], &props);
             if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
 			    printf("Picking discrete GPU: %s\n", props.deviceName);
-                queuefamIdx = getGraphicsQueueFamily(pdarr[i], scratch);
+                familyIndex = getGraphicsQueueFamily(pdarr[i], scratch);
                 physicalDevice = pdarr[i];
                 break;
 		    }
@@ -119,13 +127,8 @@ int main(int argc, char* argv[]) {
     }
 
     //Logical Device
-    VkDevice device = createDevice(physicalDevice, queuefamIdx);
+    VkDevice device = createDevice(physicalDevice, familyIndex);
     assert(device);
-
-    //GLFW Initialization
-    glfwInit();
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); //resizing disabled until handling buffers 
 
     GLFWwindow* window = glfwCreateWindow(1024, 768, "y.e.a.r.", NULL, NULL);
     if (window == NULL) {
@@ -133,11 +136,22 @@ int main(int argc, char* argv[]) {
         osfail();
     }
 
-    glfwMakeContextCurrent(window);
+    //TODO: remove glfwMakeContextCurrent(window);
 
     VkSurfaceKHR surface = createSurface(instance, window);
     assert(surface);
 
+    VkBool32 presentSupported = 0;
+    VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, familyIndex, surface, &presentSupported));
+    assert(presentSupported);
+
+    i32 windowWidth = 0, windowHeight = 0;
+    glfwGetWindowSize(window, &windowWidth, &windowHeight);
+
+    VkFormat swapchainFormat = getSwapchainFormat(physicalDevice, surface, mem);
+
+	VkSwapchainKHR swapchain = createSwapchain(device, surface, familyIndex, swapchainFormat, windowWidth, windowHeight);
+	assert(swapchain);
 
     while(!glfwWindowShouldClose(window)) {
         glfwPollEvents();
@@ -152,6 +166,8 @@ int main(int argc, char* argv[]) {
             osfail();
         }
         funcDestroyDebugMess(instance, debugMessenger, NULL);
+        vkDestroySwapchainKHR(device, swapchain, NULL);
+        vkDestroySurfaceKHR(instance, surface, NULL);
         vkDestroyDevice(device, NULL);
         vkDestroyInstance(instance, NULL);
         glfwDestroyWindow(window);
