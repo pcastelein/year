@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
     appInfo.applicationVersion = VK_MAKE_API_VERSION(0, 0, 1, 0);
     appInfo.pEngineName = "No Engine";
     appInfo.engineVersion = VK_MAKE_API_VERSION(0, 0, 1, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0; //NOTE: telling driver we are on Vulkan 1.0
+    appInfo.apiVersion = VK_API_VERSION_1_1; //NOTE: telling driver we are on Vulkan 1.0
 
     // Debug Message Info Struct
     VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
@@ -163,8 +163,112 @@ int main(int argc, char* argv[]) {
 	VkShaderModule triangleFS = loadShader(device, "shaders/frag.spv", mem);
 	assert(triangleFS);
 
+    // TODO: this is critical for performance!
+	VkPipelineCache pipelineCache = 0;
+
+	VkPipelineLayout triangleLayout = createPipelineLayout(device);
+	assert(triangleLayout);
+
+	VkPipeline trianglePipeline = createGraphicsPipeline(device, pipelineCache, renderPass, triangleVS, triangleFS, triangleLayout);
+	assert(trianglePipeline);
+
+    u32 swapchainImageCount = 0;
+    vkGetSwapchainImagesKHR(device, swapchain, &swapchainImageCount, NULL);
+    VkImage *swapchainImages = new(&mem, VkImage, swapchainImageCount, NOZERO);
+    VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &swapchainImageCount, swapchainImages));
+
+    VkImageView *swapchainImageViews = new(&mem, VkImageView, swapchainImageCount, NOZERO);
+    for (u32 i = 0; i < swapchainImageCount; i++) {
+        swapchainImageViews[i] = createImageView(device, swapchainImages[i], swapchainFormat);
+        assert(swapchainImageViews[i]);
+    }
+
+    VkFramebuffer *swapchainFramebuffers = new(&mem, VkFramebuffer, swapchainImageCount, NOZERO);
+	for (uint32_t i = 0; i < swapchainImageCount; ++i)
+	{
+		swapchainFramebuffers[i] = createFramebuffer(device, renderPass, swapchainImageViews[i], windowWidth, windowHeight);
+		assert(swapchainFramebuffers[i]);
+	}
+    
+    VkCommandPool commandPool = createCommandPool(device, familyIndex);
+	assert(commandPool);
+
+    VkCommandBufferAllocateInfo allocateInfo = { .sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+	allocateInfo.commandPool = commandPool;
+	allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocateInfo.commandBufferCount = 1;
+
+	VkCommandBuffer commandBuffer = 0;
+	VK_CHECK(vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer));
+
+ 	VkSemaphore acquireSemaphore = createSemaphore(device);
+	assert(acquireSemaphore);
+
+	VkSemaphore releaseSemaphore = createSemaphore(device);
+	assert(releaseSemaphore);
+
     while(!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+
+        u32 imageIndex = 0;
+        VK_CHECK(vkAcquireNextImageKHR(device, swapchain, ~0ull, acquireSemaphore, VK_NULL_HANDLE, &imageIndex));
+
+        VK_CHECK(vkResetCommandPool(device, commandPool, 0));
+
+		VkCommandBufferBeginInfo beginInfo = { .sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+		VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
+
+		VkClearColorValue color = {{ (48.f / 255.f), (10.f / 255.f), (36.f / 255.f), 1.0f }};
+		VkClearValue clearColor = { color };
+
+		VkRenderPassBeginInfo passBeginInfo = { .sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
+		passBeginInfo.renderPass = renderPass;
+		passBeginInfo.framebuffer = swapchainFramebuffers[imageIndex];
+		passBeginInfo.renderArea.extent.width = windowWidth;
+		passBeginInfo.renderArea.extent.height = windowHeight;
+		passBeginInfo.clearValueCount = 1;
+		passBeginInfo.pClearValues = &clearColor;
+
+		vkCmdBeginRenderPass(commandBuffer, &passBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+		VkViewport viewport = { 0, (f32)windowHeight, (f32)windowWidth, -(f32)windowHeight, 0.0f, 1.0f };
+		VkRect2D scissor = { {0, 0}, {(u32)windowWidth, (u32)windowHeight} };
+
+		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
+		vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+		vkCmdEndRenderPass(commandBuffer);
+
+		VK_CHECK(vkEndCommandBuffer(commandBuffer));
+
+		VkPipelineStageFlags submitStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+		VkSubmitInfo submitInfo = { .sType=VK_STRUCTURE_TYPE_SUBMIT_INFO };
+		submitInfo.waitSemaphoreCount = 1;
+		submitInfo.pWaitSemaphores = &acquireSemaphore;
+		submitInfo.pWaitDstStageMask = &submitStageMask;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &commandBuffer;
+		submitInfo.signalSemaphoreCount = 1;
+		submitInfo.pSignalSemaphores = &releaseSemaphore;
+
+		vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+
+		VkPresentInfoKHR presentInfo = { .sType=VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
+		presentInfo.waitSemaphoreCount = 1;
+		presentInfo.pWaitSemaphores = &releaseSemaphore;
+		presentInfo.swapchainCount = 1;
+		presentInfo.pSwapchains = &swapchain;
+		presentInfo.pImageIndices = &imageIndex;
+
+		VK_CHECK(vkQueuePresentKHR(queue, &presentInfo));
+
+		VK_CHECK(vkDeviceWaitIdle(device));
     }
 
     //NOTE: memory, I don't think there is a point in destroying these if we are exiting without running the sanitizer
@@ -175,6 +279,18 @@ int main(int argc, char* argv[]) {
             fprintf(stderr, "Failed to aquire function to destroy Debug messenger.\n");
             osfail();
         }
+        vkDestroySemaphore(device, releaseSemaphore, NULL);
+        vkDestroySemaphore(device, acquireSemaphore, NULL);
+        vkDestroyCommandPool(device,commandPool, NULL);
+        for (uint32_t i = 0; i < swapchainImageCount; ++i) {
+            vkDestroyFramebuffer(device, swapchainFramebuffers[i], NULL);
+	    }
+        for (uint32_t i = 0; i < swapchainImageCount; ++i) {
+            vkDestroyImageView(device, swapchainImageViews[i], NULL);
+	    }
+        vkDestroyPipeline(device, trianglePipeline, NULL);
+        vkDestroyPipelineLayout(device, triangleLayout, NULL);
+        vkDestroyPipelineCache(device, pipelineCache, NULL);
         vkDestroyShaderModule(device, triangleVS, NULL);
         vkDestroyShaderModule(device, triangleFS, NULL);
         vkDestroyRenderPass(device, renderPass, NULL);

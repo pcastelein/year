@@ -203,6 +203,134 @@ VkShaderModule loadShader(VkDevice device, const char* path, arena scratch)
 	return shaderModule;
 }
 
+VkPipelineLayout createPipelineLayout(VkDevice device)
+{
+	VkPipelineLayoutCreateInfo createInfo = { .sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+
+	VkPipelineLayout layout = 0;
+	VK_CHECK(vkCreatePipelineLayout(device, &createInfo, 0, &layout));
+
+	return layout;
+}
+
+VkPipeline createGraphicsPipeline(VkDevice device, VkPipelineCache pipelineCache, VkRenderPass renderPass, VkShaderModule vs, VkShaderModule fs, VkPipelineLayout layout)
+{
+	VkGraphicsPipelineCreateInfo createInfo = { .sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
+
+	VkPipelineShaderStageCreateInfo stages[2] = {};
+	stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+	stages[0].module = vs;
+	stages[0].pName = "main";
+	stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+	stages[1].module = fs;
+	stages[1].pName = "main";
+
+	createInfo.stageCount = (u32) countof(stages);
+	createInfo.pStages = stages;
+
+	VkPipelineVertexInputStateCreateInfo vertexInput = { .sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
+	createInfo.pVertexInputState = &vertexInput;
+
+	VkPipelineInputAssemblyStateCreateInfo inputAssembly = { .sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
+	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	createInfo.pInputAssemblyState = &inputAssembly;
+
+	VkPipelineViewportStateCreateInfo viewportState = { .sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
+	viewportState.viewportCount = 1;
+	viewportState.scissorCount = 1;
+	createInfo.pViewportState = &viewportState;
+
+	VkPipelineRasterizationStateCreateInfo rasterizationState = { .sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
+	rasterizationState.lineWidth = 1.f;
+	createInfo.pRasterizationState = &rasterizationState;
+
+	VkPipelineMultisampleStateCreateInfo multisampleState = { .sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
+	multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	createInfo.pMultisampleState = &multisampleState;
+
+	VkPipelineDepthStencilStateCreateInfo depthStencilState = { .sType=VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
+	createInfo.pDepthStencilState = &depthStencilState;
+
+	VkPipelineColorBlendAttachmentState colorAttachmentState = {};
+	colorAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+	VkPipelineColorBlendStateCreateInfo colorBlendState = { .sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
+	colorBlendState.attachmentCount = 1;
+	colorBlendState.pAttachments = &colorAttachmentState;
+	createInfo.pColorBlendState = &colorBlendState;
+
+	VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+
+	VkPipelineDynamicStateCreateInfo dynamicState = { .sType=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
+	dynamicState.dynamicStateCount = (u32) countof(dynamicStates);
+	dynamicState.pDynamicStates = dynamicStates;
+	createInfo.pDynamicState = &dynamicState;
+
+	createInfo.layout = layout;
+	createInfo.renderPass = renderPass;
+
+	VkPipeline pipeline = 0;
+	VK_CHECK(vkCreateGraphicsPipelines(device, pipelineCache, 1, &createInfo, 0, &pipeline));
+
+	return pipeline;
+}
+
+VkImageView createImageView(VkDevice device, VkImage image, VkFormat format)
+{
+	VkImageViewCreateInfo createInfo = { .sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+	createInfo.image = image; 
+	createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	createInfo.format = format;
+	createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	createInfo.subresourceRange.levelCount = 1;
+	createInfo.subresourceRange.layerCount = 1;
+
+	VkImageView view = 0;
+	VK_CHECK(vkCreateImageView(device, &createInfo, 0, &view));
+
+	return view;
+}
+
+VkFramebuffer createFramebuffer(VkDevice device, VkRenderPass renderPass, VkImageView imageView, u32 width, u32 height)
+{
+	VkFramebufferCreateInfo createInfo = { .sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
+	createInfo.renderPass = renderPass;
+	createInfo.attachmentCount = 1;
+	createInfo.pAttachments = &imageView;
+	createInfo.width = width;
+	createInfo.height = height;
+	createInfo.layers = 1;
+
+	VkFramebuffer framebuffer = 0;
+	VK_CHECK(vkCreateFramebuffer(device, &createInfo, 0, &framebuffer));
+
+	return framebuffer;
+}
+
+VkCommandPool createCommandPool(VkDevice device, u32 familyIndex)
+{
+	VkCommandPoolCreateInfo createInfo = { .sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+	createInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+	createInfo.queueFamilyIndex = familyIndex;
+
+	VkCommandPool commandPool = 0;
+	VK_CHECK(vkCreateCommandPool(device, &createInfo, 0, &commandPool));
+
+	return commandPool;
+}
+
+VkSemaphore createSemaphore(VkDevice device)
+{
+	VkSemaphoreCreateInfo createInfo = { .sType=VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+
+	VkSemaphore semaphore = 0;
+	VK_CHECK(vkCreateSemaphore(device, &createInfo, 0, &semaphore));
+
+	return semaphore;
+}
+
 //NOTE: maybe not neccessary
 static void printvkInstanceExtensionProperties(arena scratch) {
     u32 extensionCount = 0;
