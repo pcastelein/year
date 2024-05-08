@@ -41,7 +41,8 @@ typedef size_t    usize;
 #define new3(a, t, n)       (t *)alloc(a, szeof(t), algnof(t), n, 0) //a is for arena
 #define new4(a, t, n, f)    (t *)alloc(a, szeof(t), algnof(t), n, f) //a is for arena
 
-#define asert(c)     while(!(c)) __builtin_unreachable() //NOTE: Only Linux
+#undef  assert //TODO: remove dependency
+#define assert(c)     while(!(c)) __builtin_unreachable() //NOTE: Only Linux
 
 //Flags for core functions
 #define NONE   0x0

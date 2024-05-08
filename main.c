@@ -130,13 +130,11 @@ int main(int argc, char* argv[]) {
     VkDevice device = createDevice(physicalDevice, familyIndex);
     assert(device);
 
-    GLFWwindow* window = glfwCreateWindow(1024, 768, "y.e.a.r.", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1024, 768, "year", NULL, NULL);
     if (window == NULL) {
         glfwTerminate();
         osfail();
     }
-
-    //TODO: remove glfwMakeContextCurrent(window);
 
     VkSurfaceKHR surface = createSurface(instance, window);
     assert(surface);
@@ -153,6 +151,18 @@ int main(int argc, char* argv[]) {
 	VkSwapchainKHR swapchain = createSwapchain(device, surface, familyIndex, swapchainFormat, windowWidth, windowHeight);
 	assert(swapchain);
 
+    VkQueue queue = 0;
+	vkGetDeviceQueue(device, familyIndex, 0, &queue);
+
+	VkRenderPass renderPass = createRenderPass(device, swapchainFormat);
+	assert(renderPass);
+
+    VkShaderModule triangleVS = loadShader(device, "shaders/vert.spv", mem);
+	assert(triangleVS);
+
+	VkShaderModule triangleFS = loadShader(device, "shaders/frag.spv", mem);
+	assert(triangleFS);
+
     while(!glfwWindowShouldClose(window)) {
         glfwPollEvents();
     }
@@ -165,11 +175,17 @@ int main(int argc, char* argv[]) {
             fprintf(stderr, "Failed to aquire function to destroy Debug messenger.\n");
             osfail();
         }
-        funcDestroyDebugMess(instance, debugMessenger, NULL);
+        vkDestroyShaderModule(device, triangleVS, NULL);
+        vkDestroyShaderModule(device, triangleFS, NULL);
+        vkDestroyRenderPass(device, renderPass, NULL);
         vkDestroySwapchainKHR(device, swapchain, NULL);
         vkDestroySurfaceKHR(instance, surface, NULL);
         vkDestroyDevice(device, NULL);
+
+        funcDestroyDebugMess(instance, debugMessenger, NULL);
         vkDestroyInstance(instance, NULL);
+        
+
         glfwDestroyWindow(window);
         glfwTerminate();
         freearena(mem);

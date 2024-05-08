@@ -54,6 +54,9 @@ dkms.conf
 #vs
 .vscode/
 
+#shader output
+*.spv
+
 #exe
 bench
 year

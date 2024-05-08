@@ -145,6 +145,64 @@ VkSwapchainKHR createSwapchain(VkDevice device, VkSurfaceKHR surface, uint32_t f
 	return swapchain;
 }
 
+VkRenderPass createRenderPass(VkDevice device, VkFormat format)
+{
+	VkAttachmentDescription attachments[1] = {};
+	attachments[0].format = format;
+	attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+	attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+	VkAttachmentReference colorAttachments = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+
+	VkSubpassDescription subpass = {};
+	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+	subpass.colorAttachmentCount = 1;
+	subpass.pColorAttachments = &colorAttachments;
+
+	VkRenderPassCreateInfo createInfo = { .sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO };
+	createInfo.attachmentCount = (u32)countof(attachments);
+	createInfo.pAttachments = attachments;
+	createInfo.subpassCount = 1;
+	createInfo.pSubpasses = &subpass;
+
+	VkRenderPass renderPass = 0;
+	VK_CHECK(vkCreateRenderPass(device, &createInfo, 0, &renderPass));
+
+	return renderPass;
+}
+
+VkShaderModule loadShader(VkDevice device, const char* path, arena scratch)
+{
+	FILE* file = fopen(path, "rb");
+	assert(file);
+
+	fseek(file, 0, SEEK_END);
+	size length = ftell(file);
+	assert(length >= 0);
+	fseek(file, 0, SEEK_SET);
+
+	byte *buffer = new(&scratch, char, length, NOZERO);
+	assert(buffer);
+
+	usize rc = fread(buffer, 1, length, file);
+	assert(rc == (usize)length);
+	fclose(file);
+
+	VkShaderModuleCreateInfo createInfo = { .sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
+	createInfo.codeSize = (usize)length;
+	createInfo.pCode = (const u32*)(buffer);
+
+	VkShaderModule shaderModule = 0;
+	VK_CHECK(vkCreateShaderModule(device, &createInfo, 0, &shaderModule));
+
+	return shaderModule;
+}
+
 //NOTE: maybe not neccessary
 static void printvkInstanceExtensionProperties(arena scratch) {
     u32 extensionCount = 0;
